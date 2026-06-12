@@ -316,6 +316,15 @@ dialog p{font-size:13px;color:var(--muted);margin-bottom:10px}
 dialog code{font-size:11.5px;color:var(--green-deep);background:var(--hl-dim);padding:1px 5px;border-radius:5px}
 dialog .wallet-row{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin-top:8px;font-weight:600;font-size:13px;transition:border-color .15s}
 dialog .wallet-row:hover{border-color:var(--lilac)}
+dialog .wallet-row img{width:24px;height:24px;border-radius:6px}
+.acct-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+.acct-row:last-of-type{border-bottom:none}
+.acct-row .l{color:var(--muted);font-weight:500}
+.acct-row b{font-weight:700;font-variant-numeric:tabular-nums}
+.acct-disconnect{width:100%;margin-top:14px;padding:11px;border-radius:10px;border:1px solid var(--line);font-weight:600;font-size:13px;color:var(--down);transition:all .15s}
+.acct-disconnect:hover{border-color:var(--down);background:var(--down-dim)}
+.nowallet{font-size:13px;color:var(--muted);line-height:1.6}
+.nowallet a{color:var(--lilac-deep);font-weight:600;text-decoration:none}
 dialog .x{position:absolute;top:14px;right:16px;color:var(--muted);font-size:18px}
 
 @keyframes flashUp{0%{color:var(--green-deep)}100%{color:inherit}}
@@ -368,10 +377,6 @@ dialog .x{position:absolute;top:14px;right:16px;color:var(--muted);font-size:18p
 <header>
   <div class="h-inner">
     <div class="brand"><span class="tick" aria-hidden="true"></span>World Cup Market 2026</div>
-    <div class="venues" aria-label="Venue status">
-      <span class="venue-dot pm"><i></i>POLYMARKET</span>
-      <span class="venue-dot hl"><i></i>HYPERLIQUID&nbsp;HIP-4</span>
-    </div>
     <button class="wallet-btn" id="walletBtn">Connect wallet</button>
   </div>
 </header>
@@ -432,11 +437,7 @@ dialog .x{position:absolute;top:14px;right:16px;color:var(--muted);font-size:18p
 
 <dialog id="walletModal">
   <button class="x" onclick="walletModal.close()" aria-label="Close">✕</button>
-  <h3>Connect wallet</h3>
-  <p>Simulated in this build. Prod: <code>wagmi/viem</code> — EIP-712 CLOB orders on Polygon (PM) + signed HyperCore actions (HIP-4).</p>
-  <button class="wallet-row" data-w="MetaMask">🦊 MetaMask</button>
-  <button class="wallet-row" data-w="Rabby">🐰 Rabby</button>
-  <button class="wallet-row" data-w="WalletConnect">🔗 WalletConnect</button>
+  <div id="walletModalBody"></div>
 </dialog>
 
 <script>
@@ -446,7 +447,6 @@ dialog .x{position:absolute;top:14px;right:16px;color:var(--muted);font-size:18p
    Running `node server.js` instead? Leave both empty — it just works.   */
 window.KALSHI_PROXY   = window.KALSHI_PROXY   || 'https://wc-proxy.matteo-marzorati94.workers.dev';
 window.OVERTIME_PROXY = window.OVERTIME_PROXY || 'https://wc-proxy.matteo-marzorati94.workers.dev/overtime/markets';
-
 /* =====================================================================
    DATA SOURCES
    • Fixtures / kickoff times / live scores / results (FREE, no key):
@@ -516,8 +516,10 @@ const adapters = {
        so every response is validated to actually contain KXWCGAME markets). */
     const tfetch=(u,ms=7000)=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
       return fetch(u,{signal:c.signal}).finally(()=>clearTimeout(t));};
-    const M ='https://external-api.kalshi.com/trade-api/v2/markets?series_ticker=KXWCGAME&limit=1000';
-    const M2='https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXWCGAME&limit=1000';
+    const mkURL=(host,ser)=>`https://${host}/trade-api/v2/markets?series_ticker=${ser}&limit=1000`;
+    const SERIES=['KXWCGAME','KXMENWORLDCUP'];          /* match winners + tournament winner */
+    const M =mkURL('external-api.kalshi.com','KXWCGAME');
+    const M2=mkURL('api.elections.kalshi.com','KXWCGAME');
     const E ='https://external-api.kalshi.com/trade-api/v2/events?series_ticker=KXWCGAME&with_nested_markets=true&limit=200';
     const J=r=>r.json();
     const AO=async r=>JSON.parse((await r.json()).contents);
@@ -531,7 +533,7 @@ const adapters = {
       ['codetabs',    'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(M), J],
       ['allorigins (events)','https://api.allorigins.win/get?url='+encodeURIComponent(E), AO],
     ];
-    if(window.KALSHI_PROXY) attempts.unshift(['own proxy', window.KALSHI_PROXY+'?url='+encodeURIComponent(M2), J]);
+    if(window.KALSHI_PROXY) attempts.unshift(['own proxy', window.KALSHI_PROXY+'?url='+encodeURIComponent(M), J]);
     if(location.protocol.startsWith('http'))   /* served by server.js → same-origin proxy, no CORS at all */
       attempts.unshift(['local server', '/kalshi/trade-api/v2/markets?series_ticker=KXWCGAME&limit=1000', J]);
     const flatten=j=>{
@@ -546,7 +548,19 @@ const adapters = {
         if(!r.ok) throw new Error('HTTP '+r.status);
         const all=flatten(await parse(r));
         const wc=all.filter(mk=>(mk.event_ticker||mk.ticker||'').startsWith('KXWCGAME'));
-        if(wc.length){ console.log(`[kalshi] OK via ${name} — ${wc.length} WC markets`); window.__kalshiVia=name; return wc; }
+        if(wc.length){
+          console.log(`[kalshi] OK via ${name} — ${wc.length} game markets`);
+          /* same winning path → tournament-winner series (best effort) */
+          try{
+            const wu=url.includes('?url=')||url.includes('?quest=')
+              ? url.replace(encodeURIComponent('KXWCGAME'),encodeURIComponent('KXMENWORLDCUP'))
+              : url.replace('KXWCGAME','KXMENWORLDCUP');
+            const r2=await tfetch(wu);
+            if(r2.ok){ const w2=flatten(await parse(r2)).filter(mk=>(mk.event_ticker||'').startsWith('KXMENWORLDCUP'));
+              if(w2.length){ console.log(`[kalshi] +${w2.length} winner markets`); return wc.concat(w2); } }
+          }catch(e){ console.warn('[kalshi] winner series:',e.message||e); }
+          return wc;
+        }
         throw new Error(all.length? 'params stripped':'empty');
       }catch(e){ const msg=(e&&e.message)||String(e); errs.push(name+': '+msg); console.warn('[kalshi]',name,'failed:',msg); }
     }
@@ -826,8 +840,10 @@ function kPrices(mk,ev,suf){
   if(!(ask>0&&ask<100)&&last>0&&last<100) ask=last;          /* thin book → last trade */
   if(!(noAsk>0&&noAsk<100)&&last>0&&last<100) noAsk=100-last;
   if(!(ask>0&&ask<100)) return null;
-  return {ask,bid,noAsk,noBid,
-    url:`https://kalshi.com/markets/kxwcgame/world-cup-game/${ev.toLowerCase()}?op_market_ticker=${mk.ticker}`};
+  const url = ev.startsWith('KXMENWORLDCUP')
+    ? `https://kalshi.com/markets/kxmenworldcup/mens-world-cup-winner/${ev.toLowerCase()}?op_market_ticker=${mk.ticker}`
+    : `https://kalshi.com/markets/kxwcgame/world-cup-game/${ev.toLowerCase()}?op_market_ticker=${mk.ticker}`;
+  return {ask,bid,noAsk,noBid,url};
 }
 function wireKalshiMatch(m){
   if(!kalshiIdx) return;
@@ -860,6 +876,7 @@ async function loadKalshi(){
     if(!mks.length) return;
     kalshiIdx=true; indexKalshi(mks);
     TODAY.forEach(wireKalshiMatch); MATCH_REG.forEach(wireKalshiMatch);
+    wireKalshiWinners(mks);
     renderQuotes(); refreshKalshiUI(); if(slipSel) renderSlipNumbersOnly();
   }catch(e){ console.warn('[kalshi] load error', e); }
 }
@@ -1463,7 +1480,7 @@ function updatePosCnt(){
   c.style.display=n?'':'none';
 }
 function placeBet(){
-  if(!walletOn){ walletModal.showModal(); return; }
+  if(!walletOn){ renderWalletModal(); walletModal.showModal(); return; }
   const r=routeBuy(effBooks(state[slipSel.id],slipSel.side),amount||0);
   if(execMode==='work'){
     const lim=limitPx||+(r.avg+0.3).toFixed(1);
@@ -1596,15 +1613,72 @@ function renderPosMarks(){
 }
 
 /* ---------- wallet + chrome ---------- */
-let walletOn=false;
-const walletModal=document.getElementById('walletModal');
-document.getElementById('walletBtn').onclick=()=>walletOn?null:walletModal.showModal();
-walletModal.querySelectorAll('.wallet-row').forEach(b=>b.onclick=()=>{
-  walletOn=true; walletModal.close();
-  const btn=document.getElementById('walletBtn');
-  btn.textContent='0x7a3F…c91E'; btn.classList.add('connected');
-  showToast(`${b.dataset.w} connected (simulated)`);
+/* ---------- real wallet connection: EIP-6963 discovery + EIP-1193 ----------
+   Native browser-wallet standard (what wagmi wraps). Detects every installed
+   wallet (MetaMask, Rabby, Coinbase, Brave, ...), connects with a real
+   address + chain, and tracks account/chain changes live.
+   Order SIGNING (EIP-712 Polymarket CLOB / HyperCore actions) is the next
+   layer and ships with the Vite + wagmi build; placements here stay demo. */
+let walletOn=false, wallet={provider:null, addr:'', chainId:'', name:''};
+const PROVIDERS=[];
+window.addEventListener('eip6963:announceProvider', e=>{
+  if(!PROVIDERS.some(p=>p.info.uuid===e.detail.info.uuid)) PROVIDERS.push(e.detail);
 });
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+const walletModal=document.getElementById('walletModal');
+const CHAINS={'0x1':'Ethereum','0x89':'Polygon','0xa':'Optimism','0xa4b1':'Arbitrum','0x2105':'Base','0xaa36a7':'Sepolia'};
+const shortAddr=a=>a.slice(0,6)+'…'+a.slice(-4);
+const chainName=id=>CHAINS[id]||('Chain '+parseInt(id||'0',16));
+function renderWalletModal(){
+  const body=document.getElementById('walletModalBody');
+  if(walletOn){
+    body.innerHTML=`<h3>Wallet</h3>
+      <div class="acct-row"><span class="l">Address</span><b>${shortAddr(wallet.addr)}</b></div>
+      <div class="acct-row"><span class="l">Network</span><b>${chainName(wallet.chainId)}</b></div>
+      <div class="acct-row"><span class="l">Wallet</span><b>${wallet.name}</b></div>
+      <button class="acct-disconnect" onclick="disconnectWallet()">Disconnect</button>`;
+    return;
+  }
+  window.dispatchEvent(new Event('eip6963:requestProvider'));
+  const rows=PROVIDERS.map((p,i)=>
+    `<button class="wallet-row" onclick="connectWallet(${i})"><img src="${p.info.icon}" alt="">${p.info.name}</button>`).join('');
+  const legacy=(!PROVIDERS.length && window.ethereum)
+    ? `<button class="wallet-row" onclick="connectWallet(-1)">🦊 Browser wallet</button>` : '';
+  body.innerHTML=`<h3>Connect wallet</h3>`+(rows||legacy||
+    `<div class="nowallet">No browser wallet detected.<br>Install
+       <a href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a> or
+       <a href="https://rabby.io" target="_blank" rel="noopener">Rabby</a>, then reload.</div>`);
+}
+async function connectWallet(i){
+  const entry=i>=0? PROVIDERS[i] : {provider:window.ethereum, info:{name:'Browser wallet'}};
+  const prov=entry.provider;
+  try{
+    const accounts=await prov.request({method:'eth_requestAccounts'});
+    if(!accounts||!accounts.length) return;
+    wallet={provider:prov, addr:accounts[0], chainId:await prov.request({method:'eth_chainId'}).catch(()=>''), name:entry.info.name};
+    walletOn=true; walletModal.close(); refreshWalletBtn();
+    showToast(`${wallet.name} connected — ${shortAddr(wallet.addr)}`);
+    prov.on && prov.on('accountsChanged', accs=>{
+      if(!accs||!accs.length){ disconnectWallet(); return; }
+      wallet.addr=accs[0]; refreshWalletBtn(); showToast('Account switched — '+shortAddr(wallet.addr));
+    });
+    prov.on && prov.on('chainChanged', cid=>{ wallet.chainId=cid; refreshWalletBtn(); showToast('Network — '+chainName(cid)); });
+    prov.on && prov.on('disconnect', ()=>disconnectWallet());
+  }catch(e){
+    if(e && e.code===4001) showToast('Connection cancelled');
+    else showToast('Wallet error — '+((e&&e.message)||e).toString().slice(0,60));
+  }
+}
+function disconnectWallet(){
+  walletOn=false; wallet={provider:null, addr:'', chainId:'', name:''};
+  walletModal.close(); refreshWalletBtn(); showToast('Wallet disconnected');
+}
+function refreshWalletBtn(){
+  const btn=document.getElementById('walletBtn');
+  if(walletOn){ btn.textContent=shortAddr(wallet.addr); btn.classList.add('connected'); }
+  else{ btn.textContent='Connect wallet'; btn.classList.remove('connected'); }
+}
+document.getElementById('walletBtn').onclick=()=>{ renderWalletModal(); walletModal.showModal(); };
 function showToast(msg){
   const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
   clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),3800);
@@ -1740,11 +1814,11 @@ async function boot(){
     renderQuotes(); updateBadge(); if(hlUp) startPolling();
   });
   kalshiP.then(mks=>{
-    if(!mks.length){ console.warn('[kalshi] unavailable — run node server.js for guaranteed quotes'); setTimeout(loadKalshi,45000); return; }
+    if(!mks.length){ console.warn('[kalshi] unavailable — run node server.js for guaranteed quotes'); return; }
     kalshiIdx=true; indexKalshi(mks);
     TODAY.forEach(wireKalshiMatch); MATCH_REG.forEach(wireKalshiMatch);
     renderQuotes(); refreshKalshiUI(); updateBadge();
-    setInterval(loadKalshi,60000);
+    setInterval(loadKalshi,15000);
   });
   /* refresh fixtures/scores every 60s when live */
   if(live) setInterval(async()=>{
