@@ -531,7 +531,7 @@ const adapters = {
       ['codetabs',    'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(M), J],
       ['allorigins (events)','https://api.allorigins.win/get?url='+encodeURIComponent(E), AO],
     ];
-    if(window.KALSHI_PROXY) attempts.unshift(['own proxy', window.KALSHI_PROXY+'?url='+encodeURIComponent(M), J]);
+    if(window.KALSHI_PROXY) attempts.unshift(['own proxy', window.KALSHI_PROXY+'?url='+encodeURIComponent(M2), J]);
     if(location.protocol.startsWith('http'))   /* served by server.js → same-origin proxy, no CORS at all */
       attempts.unshift(['local server', '/kalshi/trade-api/v2/markets?series_ticker=KXWCGAME&limit=1000', J]);
     const flatten=j=>{
@@ -1740,11 +1740,11 @@ async function boot(){
     renderQuotes(); updateBadge(); if(hlUp) startPolling();
   });
   kalshiP.then(mks=>{
-    if(!mks.length){ console.warn('[kalshi] unavailable — run node server.js for guaranteed quotes'); return; }
+    if(!mks.length){ console.warn('[kalshi] unavailable — run node server.js for guaranteed quotes'); setTimeout(loadKalshi,45000); return; }
     kalshiIdx=true; indexKalshi(mks);
     TODAY.forEach(wireKalshiMatch); MATCH_REG.forEach(wireKalshiMatch);
     renderQuotes(); refreshKalshiUI(); updateBadge();
-    setInterval(loadKalshi,15000);
+    setInterval(loadKalshi,60000);
   });
   /* refresh fixtures/scores every 60s when live */
   if(live) setInterval(async()=>{
